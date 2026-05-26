@@ -11,7 +11,6 @@ import (
 )
 
 func loadEnv() {
-	// Simple .env loader (no external deps needed)
 	data, err := os.ReadFile(".env")
 	if err != nil {
 		return
@@ -23,9 +22,7 @@ func loadEnv() {
 		}
 		for i, ch := range line {
 			if ch == '=' {
-				key := line[:i]
-				val := line[i+1:]
-				os.Setenv(key, val)
+				os.Setenv(line[:i], line[i+1:])
 				break
 			}
 		}
@@ -47,10 +44,10 @@ func splitLines(s string) []string {
 	return lines
 }
 
-func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+func cors(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -64,17 +61,19 @@ func main() {
 	loadEnv()
 	db.Init()
 
+	fmt.Println("♻️  restoring previous deployments...")
+	handlers.RestoreDeployments()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// Static files
 	http.Handle("/", http.FileServer(http.Dir("frontend/static")))
-
-	// API routes
-	http.HandleFunc("/api/signup", corsMiddleware(handlers.Signup))
-	http.HandleFunc("/api/login", corsMiddleware(handlers.Login))
+	http.HandleFunc("/api/signup", cors(handlers.Signup))
+	http.HandleFunc("/api/login", cors(handlers.Login))
+	http.HandleFunc("/api/deploy", cors(handlers.Deploy))
+	http.HandleFunc("/api/status", cors(handlers.Status))
 
 	fmt.Printf("🚀 mini-render running on http://localhost:%s\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
