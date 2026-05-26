@@ -73,6 +73,7 @@ func main() {
 	http.HandleFunc("/api/signup", cors(handlers.Signup))
 	http.HandleFunc("/api/login", cors(handlers.Login))
 	http.HandleFunc("/api/deploy", cors(handlers.Deploy))
+	http.HandleFunc("/api/deploy-code", cors(handlers.DeployCode))
 	http.HandleFunc("/api/status", cors(handlers.Status))
 
 	fmt.Printf("🚀 mini-render running on http://localhost:%s\n", port)

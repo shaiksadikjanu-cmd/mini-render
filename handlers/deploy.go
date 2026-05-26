@@ -194,3 +194,60 @@ func Status(w http.ResponseWriter, r *http.Request) {
 		"count":   len(list),
 	})
 }
+
+func DeployCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respond(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var input struct {
+		Username string `json:"username"`
+		Appname  string `json:"appname"`
+		Code     string `json:"code"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respond(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+
+	if input.Username == "" || input.Appname == "" || input.Code == "" {
+		respond(w, http.StatusBadRequest, map[string]string{"error": "username, appname and code required"})
+		return
+	}
+
+	appDir := filepath.Join("/home/ubuntu/deployments", input.Username, input.Appname)
+	os.MkdirAll(appDir, 0755)
+	os.WriteFile(filepath.Join(appDir, "app.py"), []byte(input.Code), 0644)
+
+	key := input.Username + "/" + input.Appname
+	if cmd, ok := running[key]; ok {
+		cmd.Process.Kill()
+		delete(running, key)
+	}
+
+	port := allocatePort()
+	cmd := exec.Command("python3", "app.py")
+	cmd.Dir = appDir
+	cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(port))
+	cmd.Start()
+	running[key] = cmd
+
+	deps := loadState()
+	newDeps := []Deployment{}
+	for _, d := range deps {
+		if !(d.Username == input.Username && d.Appname == input.Appname) {
+			newDeps = append(newDeps, d)
+		}
+	}
+	newDeps = append(newDeps, Deployment{Username: input.Username, Appname: input.Appname, Port: port})
+	saveState(newDeps)
+	updateNginx()
+
+	respond(w, http.StatusOK, map[string]interface{}{
+		"message": "deployed successfully",
+		"url":     fmt.Sprintf("http://13.200.117.42/%s/%s/", input.Username, input.Appname),
+		"port":    port,
+	})
+}
